@@ -26,4 +26,4 @@ The directory `optimization` is broken up into five task directories. Each task 
 
 A single binary for running these tasks can be found at `main/federated_trainer.py`. This binary will, according to `absl` flags, run any of the six task-specific federated training libraries.
 
-There is also a `shared` directory with utilities specific to these experiments, such as implementations of metrics used for evaluation.
+The `optimization/shared` directory with utilities specific to these experiments, such as implementations of metrics used for evaluation.
