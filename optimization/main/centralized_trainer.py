@@ -1,4 +1,4 @@
-# Copyright 2020, Google LLC.
+# Copyright 2021, Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,18 +24,17 @@ import collections
 from absl import app
 from absl import flags
 
-from optimization.cifar100 import centralized_cifar100
-from optimization.emnist import centralized_emnist
-from optimization.emnist_ae import centralized_emnist_ae
-from optimization.shakespeare import centralized_shakespeare
+import wandb
+
 from optimization.shared import optimizer_utils
-from optimization.stackoverflow import centralized_stackoverflow
-from optimization.stackoverflow_lr import centralized_stackoverflow_lr
+from optimization.emnist import centralized_emnist
+from optimization.bin_lr import centralized_bin_lr
+
+from utils import threading_utils
 from utils import utils_impl
 
 _SUPPORTED_TASKS = [
-    'cifar100', 'emnist_cr', 'emnist_ae', 'shakespeare', 'stackoverflow_nwp',
-    'stackoverflow_lr'
+    'emnist_cr', 'bin_lr'
 ]
 
 with utils_impl.record_new_flags() as hparam_flags:
@@ -57,64 +56,66 @@ with utils_impl.record_new_flags() as hparam_flags:
                        'Size of batches for training and eval.')
   flags.DEFINE_integer('decay_epochs', None, 'Number of epochs before decaying '
                        'the learning rate.')
+  # delay epochs = 60?
   flags.DEFINE_float('lr_decay', None, 'How much to decay the learning rate by'
                      ' at each stage.')
+  # lr decay = 0.2?
 
-  # CIFAR-100 flags
-  flags.DEFINE_integer('cifar100_crop_size', 24, 'The height and width of '
-                       'images after preprocessing.')
+# with utils_impl.record_hparam_flags() as emnist_cr_flags:
+#   pass
 
-  # EMNIST character recognition flags
-  flags.DEFINE_enum('emnist_cr_model', 'cnn', ['cnn', '2nn'],
-                    'Which model to use for classification.')
-
-  # Shakespeare next character prediction flags
+# with utils_impl.record_hparam_flags() as bin_lr_flags:
+  # Binary logistic regression flags
+  flags.DEFINE_string(
+    'bin_lr_dataset_name', None, 'The name of datasets')
   flags.DEFINE_integer(
-      'shakespeare_sequence_length', 80,
-      'Length of character sequences to use for the RNN model.')
-
-  # Stack Overflow NWP flags
-  flags.DEFINE_integer('so_nwp_vocab_size', 10000, 'Size of vocab to use.')
-  flags.DEFINE_integer('so_nwp_num_oov_buckets', 1,
-                       'Number of out of vocabulary buckets.')
-  flags.DEFINE_integer('so_nwp_sequence_length', 20,
-                       'Max sequence length to use.')
-  flags.DEFINE_integer(
-      'so_nwp_num_validation_examples', 10000, 'Number of examples '
-      'to use from test set for per-round validation.')
-  flags.DEFINE_integer('so_nwp_embedding_size', 96,
-                       'Dimension of word embedding to use.')
-  flags.DEFINE_integer('so_nwp_latent_size', 670,
-                       'Dimension of latent size to use in recurrent cell')
-  flags.DEFINE_integer('so_nwp_num_layers', 1,
-                       'Number of stacked recurrent layers to use.')
-  flags.DEFINE_boolean(
-      'so_nwp_shared_embedding', False,
-      'Boolean indicating whether to tie input and output embeddings.')
-
-  # Stack Overflow LR flags
-  flags.DEFINE_integer('so_lr_vocab_tokens_size', 10000,
-                       'Vocab tokens size used.')
-  flags.DEFINE_integer('so_lr_vocab_tags_size', 500, 'Vocab tags size used.')
-  flags.DEFINE_integer(
-      'so_lr_num_validation_examples', 10000, 'Number of examples '
-      'to use from test set for per-round validation.')
+    'bin_lr_num_attr', None, 'Number of attributes'
+  )
+  # # emnist flag moves to emnist_models.py
+  # # Stack Overflow LR flags
+  # flags.DEFINE_integer('so_lr_vocab_tokens_size', 10000,
+  #                      'Vocab tokens size used.')
+  # flags.DEFINE_integer('so_lr_vocab_tags_size', 500, 'Vocab tags size used.')
+  # flags.DEFINE_integer(
+  #     'so_lr_num_validation_examples', 10000, 'Number of examples '
+  #     'to use from test set for per-round validation.')
 
 FLAGS = flags.FLAGS
+
+# TASK_FLAGS = collections.OrderedDict(
+#     emnist_cr=emnist_cr_flags,
+#     bin_lr=bin_lr_flags)
+
+# TASK_FLAG_PREFIXES = collections.OrderedDict(
+#     emnist_cr='emnist_cr',
+#     bin_lr='bin_lr')
+
 
 
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
+  threading_utils.set_threading_from_flags()
+
   optimizer = optimizer_utils.create_optimizer_fn_from_flags('centralized')()
   hparams_dict = collections.OrderedDict([
       (name, FLAGS[name].value) for name in hparam_flags
   ])
 
+  if FLAGS.experiment_name is not None:
+    experiment_name = FLAGS.experiment_name
+    wandb.init(config=FLAGS, sync_tensorboard=False,name=experiment_name)
+  else:
+    wandb.init(config=FLAGS,sync_tensorboard=False)
+    wandb.run.save()
+    wandb.run.name = FLAGS.task + "_c_" + str(wandb.run.name) + "_" + str(wandb.run.id)
+    wandb.run.save()
+    experiment_name = wandb.run.name
+
   common_args = collections.OrderedDict([
       ('optimizer', optimizer),
-      ('experiment_name', FLAGS.experiment_name),
+      ('experiment_name', experiment_name),
       ('root_output_dir', FLAGS.root_output_dir),
       ('num_epochs', FLAGS.num_epochs),
       ('batch_size', FLAGS.batch_size),
@@ -123,34 +124,15 @@ def main(argv):
       ('hparams_dict', hparams_dict),
   ])
 
-  if FLAGS.task == 'cifar100':
-    centralized_cifar100.run_centralized(
-        **common_args, crop_size=FLAGS.cifar100_crop_size)
-
-  elif FLAGS.task == 'emnist_cr':
-    centralized_emnist.run_centralized(
-        **common_args, emnist_model=FLAGS.emnist_cr_model)
-
-  elif FLAGS.task == 'emnist_ae':
-    centralized_emnist_ae.run_centralized(**common_args)
-
-  elif FLAGS.task == 'shakespeare':
-    centralized_shakespeare.run_centralized(
-        **common_args, sequence_length=FLAGS.shakespeare_sequence_length)
-
-  elif FLAGS.task == 'stackoverflow_nwp':
-    so_nwp_flags = collections.OrderedDict()
+  if FLAGS.task == 'emnist_cr':
+    centralized_emnist.run_centralized(**common_args)
+  
+  elif FLAGS.task == 'bin_lr':
+    bin_lr_flags = collections.OrderedDict()
     for flag_name in FLAGS:
-      if flag_name.startswith('so_nwp_'):
-        so_nwp_flags[flag_name[7:]] = FLAGS[flag_name].value
-    centralized_stackoverflow.run_centralized(**common_args, **so_nwp_flags)
-
-  elif FLAGS.task == 'stackoverflow_lr':
-    so_lr_flags = collections.OrderedDict()
-    for flag_name in FLAGS:
-      if flag_name.startswith('so_lr_'):
-        so_lr_flags[flag_name[6:]] = FLAGS[flag_name].value
-    centralized_stackoverflow_lr.run_centralized(**common_args, **so_lr_flags)
+      if flag_name.startswith('bin_lr_'):
+        bin_lr_flags[flag_name[7:]] = FLAGS[flag_name].value
+    centralized_bin_lr.run_centralized(**common_args, **bin_lr_flags)
 
   else:
     raise ValueError(

@@ -23,10 +23,9 @@ import tensorflow_federated as tff
 
 from utils import training_loop
 from utils import training_utils
-from utils.datasets import emnist_dataset
-from utils.models import emnist_models
+from utils.datasets import synthetic_dataset
+from utils.models import lstsq_models
 
-EMNIST_MODELS = ['cnn', '2nn', 'qlr', 'klr', 'lr']
 FLAGS = flags.FLAGS
 
 def run_federated(
@@ -38,9 +37,13 @@ def run_federated(
     max_batches_per_client: Optional[int] = -1,
     client_datasets_random_seed: Optional[int] = None,
     total_rounds: Optional[int] = 1500,
-    experiment_name: Optional[str] = 'federated_emnist_cr',
+    experiment_name: Optional[str] = 'federated_lstsq',
     root_output_dir: Optional[str] = '/tmp/fed_opt',
     max_eval_batches: Optional[int] = None,
+    dataset_name: Optional[str] = None,
+    num_attr: Optional[int] = None,
+    nnz_real: Optional[int] = None,
+    nnz_cutoff: Optional[float] = 1e-4,
     **kwargs):
   """Runs an iterative process on the EMNIST character recognition task.
 
@@ -89,55 +92,32 @@ def run_federated(
       on supported arguments, see
       `federated_research/utils/training_utils.py`.
   """
-  model = FLAGS.emnist_cr_model
-  only_digits = FLAGS.emnist_cr_only_digits
-  subset_ratio = FLAGS.emnist_cr_subset_ratio
-
-  emnist_train, _ = emnist_dataset.get_emnist_datasets(
+  train_ds, test_ds = synthetic_dataset.get_synthetic_datasets(
+      dataset_name,
       client_batch_size,
       client_epochs_per_round,
       max_batches_per_client=max_batches_per_client,
-      only_digits=only_digits,
-      subset_ratio=subset_ratio)
+      )
 
-  central_emnist_train, emnist_test = emnist_dataset.get_centralized_datasets(
+  centralized_train_ds, test_ds = \
+    synthetic_dataset.get_centralized_synthetic_datasets(
+      dataset_name=dataset_name,
       train_batch_size=client_batch_size,
       max_test_batches=max_eval_batches,
-      only_digits=only_digits,
-      subset_ratio=subset_ratio)
+      )
 
-  input_spec = emnist_train.element_type_structure
+  input_spec = train_ds.element_type_structure
 
+  model_builder = functools.partial(
+        lstsq_models.create_lstsq_model,
+        num_attr=num_attr,
+        nnz_real=nnz_real,
+        nnz_cutoff=nnz_cutoff,
+        )
+  #
 
-  if model == 'cnn':
-    model_builder = functools.partial(
-        emnist_models.create_cnn_model,
-        only_digits=only_digits)
-  elif model == '2nn':
-    model_builder = functools.partial(
-        emnist_models.create_2nn_model,
-        only_digits=only_digits)
-  elif model == 'qlr':
-    model_builder = functools.partial(
-        emnist_models.create_qlr_model,
-        only_digits=only_digits)
-  elif model == 'klr':
-    model_builder = functools.partial(
-        emnist_models.create_klr_model,
-        kernelized_features=FLAGS.emnist_cr_klr_features,
-        kernelized_scale=FLAGS.emnist_cr_klr_scale,
-        only_digits=only_digits)
-  elif model == 'lr':
-    model_builder = functools.partial(
-        emnist_models.create_lr_model,
-        only_digits=only_digits)
-  else:
-    raise ValueError(
-        'Cannot handle model flag [{!s}], must be one of {!s}.'.format(
-            model, EMNIST_MODELS))
-
-  loss_builder = tf.keras.losses.SparseCategoricalCrossentropy
-  metrics_builder = lambda: [tf.keras.metrics.SparseCategoricalAccuracy()]
+  loss_builder = tf.keras.losses.MeanSquaredError
+  metrics_builder = lambda: []
 
   def tff_model_fn() -> tff.learning.Model:
     return tff.learning.from_keras_model(
@@ -149,19 +129,19 @@ def run_federated(
   training_process = iterative_process_builder(tff_model_fn)
 
   client_datasets_fn = training_utils.build_client_datasets_fn(
-      train_dataset=emnist_train,
+      train_dataset=train_ds,
       train_clients_per_round=clients_per_round,
       client_sample_pow=client_sample_pow,
       random_seed=client_datasets_random_seed)
 
   evaluate_fn = training_utils.build_evaluate_fn(
-      eval_dataset=emnist_test,
+      eval_dataset=test_ds,
       model_builder=model_builder,
       loss_builder=loss_builder,
       metrics_builder=metrics_builder)
 
   train_evaluate_fn = training_utils.build_evaluate_fn(
-      eval_dataset=central_emnist_train,
+      eval_dataset=centralized_train_ds,
       model_builder=model_builder,
       loss_builder=loss_builder,
       metrics_builder=metrics_builder)

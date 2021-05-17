@@ -60,25 +60,28 @@ class ServerState(object):
   """Structure for state on the server.
 
   Fields:
-  -   `model`: A dictionary of the model's trainable and non-trainable
-        weights.
+  -   `model`: primal model (weights), A dictionary of the model's trainable and non-trainable weights (consistent with FedAvg)
+  -   `dual_model`: dual model (weights),  dictionary of the model's trainable and non-trainable weights.
   -   `optimizer_state`: The server optimizer variables.
   -   `round_num`: The current training round, as a float.
   """
   model = attr.ib()
+  dual_model_weights = attr.ib() # actually model_weights
   optimizer_state = attr.ib()
+  elapsed_lr = attr.ib()
   round_num = attr.ib()
   # This is a float to avoid type incompatibility when calculating learning rate
   # schedules.
 
 
 @tf.function
-def server_update(model, server_optimizer, server_mirror, server_state,
-                  weights_delta, elapsed_lr_delta):
+def server_update(primal_model, dual_model, server_optimizer, server_mirror, 
+                  server_state, weights_delta, elapsed_lr_delta):
   """Updates `server_state` based on `weights_delta`, increase the round number.
 
   Args:
     model: A `tff.learning.Model`.
+	dual_model: A `tff.learning.Model` for dual weights.
     server_optimizer: A `tf.keras.optimizers.Optimizer`.
     server_state: A `ServerState`, the state to be updated.
     weights_delta: An update to the trainable variables of the model.
@@ -86,8 +89,9 @@ def server_update(model, server_optimizer, server_mirror, server_state,
   Returns:
     An updated `ServerState`.
   """
-  model_weights = _get_weights(model)
-  tff.utils.assign(model_weights, server_state.model)
+  dual_model_weights = _get_weights(dual_model)
+  # server state hold dual model
+  tff.utils.assign(dual_model_weights, server_state.dual_model_weights)
   # Server optimizer variables must be initialized prior to invoking this
   tff.utils.assign(server_optimizer.variables(), server_state.optimizer_state)
 
@@ -99,19 +103,23 @@ def server_update(model, server_optimizer, server_mirror, server_state,
   # Apply the update to the model. We must multiply weights_delta by -1.0 to
   # view it as a gradient that should be applied to the server_optimizer.
   grads_and_vars = [
-      (-1.0 * x, v) for x, v in zip(weights_delta, model_weights.trainable)
+      (-1.0 * x, v) for x, v in zip(weights_delta, dual_model_weights.trainable)
   ]
 
   server_optimizer.apply_gradients(grads_and_vars)
+  elapsed_lr = server_state.elapsed_lr + elapsed_lr_delta * server_optimizer.lr
 
-  server_mirror(model_weights.trainable, lr=server_optimizer.lr*elapsed_lr_delta)
-  # tff.utils.assign(model_weights.trainable, server_mirror(model_weights.trainable))
+  primal_model_weights = _get_weights(primal_model)
+  tff.utils.assign(primal_model_weights, dual_model_weights)
+  server_mirror(primal_model_weights.trainable, lr=elapsed_lr)
 
   # Create a new state based on the updated model.
   return tff.utils.update_state(
       server_state,
-      model=model_weights,
+      model=primal_model_weights,
+      dual_model_weights=dual_model_weights,
       optimizer_state=server_optimizer.variables(),
+      elapsed_lr = elapsed_lr,
       round_num=server_state.round_num + 1.0)
 
 
@@ -132,7 +140,7 @@ class ClientOutput(object):
   """
   weights_delta = attr.ib()
   client_weight = attr.ib()
-  elapsed_lr_delta = attr.ib()
+  elapsed_lr_delta = attr.ib() # necessary for dual averaging
   model_output = attr.ib()
   optimizer_output = attr.ib()
 
@@ -147,11 +155,13 @@ def create_client_update_fn():
   """
 
   @tf.function
-  def client_update(model,
+  def client_update(primal_model,
+                    dual_model,
                     dataset,
-                    initial_weights,
+                    dual_initial_weights,
                     client_optimizer,
                     client_mirror,
+                    elapsed_lr,
                     client_weight_fn=None,
                     client_weight_pow=1):
     """Updates client model.
@@ -159,7 +169,7 @@ def create_client_update_fn():
     Args:
       model: A `tff.learning.Model`.
       dataset: A 'tf.data.Dataset'.
-      initial_weights: A `tff.learning.ModelWeights` from server.
+      dual_initial_weights: A `tff.learning.Model.weights` from server.
       client_optimizer: A `tf.keras.optimizer.Optimizer` object.
       client_weight_fn: Optional function that takes the output of
         `model.report_local_outputs` and returns a tensor that provides the
@@ -170,28 +180,39 @@ def create_client_update_fn():
       A 'ClientOutput`.
     """
 
-    model_weights = _get_weights(model)
-    tff.utils.assign(model_weights, initial_weights)
+    primal_model_weights = _get_weights(primal_model)
+    dual_model_weights = _get_weights(dual_model)
+    new_elapsed_lr = elapsed_lr
 
-    elapsed_lr_delta = 0.0
-
+    tff.utils.assign(dual_model_weights, dual_initial_weights)
     num_examples = tf.constant(0, dtype=tf.int32)
+
     for batch in dataset:
+      # assign dual to primal
+      tff.utils.assign(primal_model_weights, dual_model_weights)
+
+      # apply (in place) projector to primal model
+      client_mirror(primal_model_weights.trainable, lr=new_elapsed_lr)
+
+      # tape gradients
       with tf.GradientTape() as tape:
-        output = model.forward_pass(batch)
-      grads = tape.gradient(output.loss, model_weights.trainable)
-      grads_and_vars = zip(grads, model_weights.trainable)
+        output = primal_model.forward_pass(batch)
+      
+      grads = tape.gradient(output.loss, primal_model_weights.trainable)
+
+      # zip gradient with DUAL trainable
+      grads_and_vars = zip(grads, dual_model_weights.trainable)
+
+      # apply gradients (to dual)
       client_optimizer.apply_gradients(grads_and_vars)
 
-      client_mirror(model_weights.trainable, lr = client_optimizer.lr)
-
       num_examples += tf.shape(output.predictions)[0]
-      elapsed_lr_delta += client_optimizer.lr
+      new_elapsed_lr += client_optimizer.lr
 
-    aggregated_outputs = model.report_local_outputs()
+    aggregated_outputs = primal_model.report_local_outputs()
     weights_delta = tf.nest.map_structure(lambda a, b: a - b,
-                                          model_weights.trainable,
-                                          initial_weights.trainable)
+                                          dual_model_weights.trainable,
+                                          dual_initial_weights.trainable)
     weights_delta, has_non_finite_weight = (
         tensor_utils.zero_all_if_any_non_finite(weights_delta))
 
@@ -203,10 +224,8 @@ def create_client_update_fn():
       client_weight = client_weight_fn(aggregated_outputs)
 
     return ClientOutput(
-        weights_delta, 
-        client_weight, 
-        elapsed_lr_delta,
-        aggregated_outputs,
+        weights_delta, client_weight,
+        new_elapsed_lr - elapsed_lr, aggregated_outputs,
         collections.OrderedDict([('num_examples', num_examples)]))
 
   return client_update
@@ -214,10 +233,10 @@ def create_client_update_fn():
 
 def build_server_init_fn(
     model_fn: ModelBuilder,
-    server_optimizer_fn: Callable[[], tf.keras.optimizers.Optimizer]):
+    server_optimizer_fn: Callable[[], tf.keras.optimizers.Optimizer]):  
   """Builds a `tff.tf_computation` that returns the initial `ServerState`.
 
-  The attributes `ServerState.model` and `ServerState.optimizer_state` are
+  The attributes `ServerState.dual_model` and `ServerState.optimizer_state` are
   initialized via their constructor functions. The attribute
   `ServerState.round_num` is set to 0.0.
 
@@ -233,17 +252,20 @@ def build_server_init_fn(
   @tff.tf_computation
   def server_init_tf():
     server_optimizer = server_optimizer_fn()
-    model = model_fn()
-    _initialize_optimizer_vars(model, server_optimizer)
+    primal_model = model_fn()
+    dual_model = model_fn()
+    _initialize_optimizer_vars(dual_model, server_optimizer)
     return ServerState(
-        model=_get_weights(model),
+        model=_get_weights(primal_model),
+        dual_model_weights=_get_weights(dual_model),
         optimizer_state=server_optimizer.variables(),
+        elapsed_lr=0.0,
         round_num=0.0)
 
   return server_init_tf
 
 
-def build_fed_avg_process(
+def build_fed_dual_avg_process(
     model_fn: ModelBuilder,
     client_optimizer_fn: OptimizerBuilder,
     client_lr: Union[float, LRScheduleFn] = 0.1,
@@ -292,30 +314,34 @@ def build_fed_avg_process(
   server_state_type = server_init_tf.type_signature.result
   model_weights_type = server_state_type.model
   round_num_type = server_state_type.round_num
-  print(round_num_type)
-  elapsed_lr_type = tf.float32
+  elapsed_lr_type = server_state_type.elapsed_lr
+
   tf_dataset_type = tff.SequenceType(dummy_model.input_spec)
   model_input_type = tff.SequenceType(dummy_model.input_spec)
 
-  @tff.tf_computation(model_input_type, model_weights_type, round_num_type)
-  def client_update_fn(tf_dataset, initial_model_weights, round_num):
+  @tff.tf_computation(model_input_type, model_weights_type, round_num_type, elapsed_lr_type)
+  def client_update_fn(tf_dataset, initial_model_weights, round_num, elapsed_lr):
     client_lr = client_lr_schedule(round_num)
     client_optimizer = client_optimizer_fn(client_lr)
     client_update = create_client_update_fn()
-    return client_update(model_fn(), tf_dataset, initial_model_weights,
-                         client_optimizer, client_mirror,
+    # client_update consumes two dummy model
+    return client_update(model_fn(), model_fn(), tf_dataset, initial_model_weights,
+                         client_optimizer, client_mirror, elapsed_lr,
                          client_weight_fn, client_weight_pow)
 
   @tff.tf_computation(server_state_type, model_weights_type.trainable, elapsed_lr_type)
   def server_update_fn(server_state, model_delta, elapsed_lr_delta):
-    model = model_fn()
+    primal_model = model_fn()
+    dual_model = model_fn()
     server_lr = server_lr_schedule(server_state.round_num)
     server_optimizer = server_optimizer_fn(server_lr)
     # We initialize the server optimizer variables to avoid creating them
     # within the scope of the tf.function server_update.
-    _initialize_optimizer_vars(model, server_optimizer)
-    return server_update(model, server_optimizer, server_mirror,
-                         server_state, model_delta, elapsed_lr_delta)
+    _initialize_optimizer_vars(primal_model, server_optimizer)
+    _initialize_optimizer_vars(dual_model, server_optimizer)
+    return server_update(primal_model, dual_model, server_optimizer,
+                        server_mirror, server_state, 
+                        model_delta, elapsed_lr_delta)
 
   @tff.federated_computation(
       tff.FederatedType(server_state_type, tff.SERVER),
@@ -331,12 +357,13 @@ def build_fed_avg_process(
       A tuple of updated `ServerState` and the result of
       `tff.learning.Model.federated_output_computation`.
     """
-    client_model = tff.federated_broadcast(server_state.model)
+    client_dual_model_weights = tff.federated_broadcast(server_state.dual_model_weights)
     client_round_num = tff.federated_broadcast(server_state.round_num)
-
+    client_elapsed_lr = tff.federated_broadcast(server_state.elapsed_lr)
     client_outputs = tff.federated_map(
-        client_update_fn,
-        (federated_dataset, client_model, client_round_num))
+        client_update_fn, 
+        (federated_dataset, client_dual_model_weights,
+         client_round_num, client_elapsed_lr))
 
     client_weight = client_outputs.client_weight
     model_delta = tff.federated_mean(
@@ -346,7 +373,7 @@ def build_fed_avg_process(
         client_outputs.elapsed_lr_delta, weight=client_weight)
 
     server_state = tff.federated_map(server_update_fn,
-                                     (server_state, model_delta, elapsed_lr_delta))
+                   (server_state, model_delta, elapsed_lr_delta))
 
     aggregated_outputs = dummy_model.federated_output_computation(
         client_outputs.model_output)

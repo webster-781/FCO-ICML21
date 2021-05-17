@@ -11,17 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Baseline experiment on centralized EMNIST data."""
+"""Centralized Binary Logistic Regression on Synthetic Dataset"""
+
 from typing import Any, Mapping, Optional
 from absl import flags
 
 import tensorflow as tf
 
 from utils import centralized_training_loop
-from utils.datasets import emnist_dataset
-from utils.models import emnist_models
+from utils.datasets import synthetic_dataset
+from utils.models import bin_lr_models
 
-EMNIST_MODELS = ['cnn', '2nn', 'qlr', 'klr', 'lr']
 FLAGS = flags.FLAGS
 
 def run_centralized(optimizer: tf.keras.optimizers.Optimizer,
@@ -32,8 +32,10 @@ def run_centralized(optimizer: tf.keras.optimizers.Optimizer,
                     decay_epochs: Optional[int] = None,
                     lr_decay: Optional[float] = None,
                     hparams_dict: Optional[Mapping[str, Any]] = None,
-                    max_batches: Optional[int] = None):
-  """Trains a model on EMNIST character recognition using a given optimizer.
+                    max_batches: Optional[int] = None,
+                    dataset_name: Optional[str] = None,
+                    num_attr: Optional[int] = None):
+  """Trains a model by binary logistic regression using a given optimizer.
 
   Args:
     optimizer: A `tf.keras.optimizers.Optimizer` used to perform training.
@@ -54,41 +56,21 @@ def run_centralized(optimizer: tf.keras.optimizers.Optimizer,
       that many batches. If set to None or a nonpositive integer, the full
       datasets are used.
   """
-  model = FLAGS.emnist_cr_model
-  only_digits = FLAGS.emnist_cr_only_digits
 
-  train_dataset, eval_dataset = emnist_dataset.get_centralized_datasets(
+  train_dataset, eval_dataset = synthetic_dataset.get_centralized_synthetic_datasets(
+      dataset_name,
       train_batch_size=batch_size,
       max_train_batches=max_batches,
       max_test_batches=max_batches,
-      only_digits=only_digits,
-      subset_ratio=FLAGS.emnist_cr_subset_ratio)
+  )
 
-  if model == 'cnn':
-    model = emnist_models.create_augmented_cnn_model_from_flags(
-        only_digits=only_digits)
-  elif model == '2nn':
-    model = emnist_models.create_augmented_2nn_model_from_flags(
-        only_digits=only_digits)
-  elif model == 'qlr':
-    model = emnist_models.create_augmented_qlr_model_from_flags(
-        only_digits=only_digits)
-  elif model == 'klr':
-    model = emnist_models.create_augmented_klr_model_from_flags(
-        kernelized_features=FLAGS.emnist_cr_klr_features,
-        kernelized_scale=FLAGS.emnist_cr_klr_scale,
-        only_digits=only_digits)
-  elif model == 'lr':
-    model = emnist_models.create_augmented_lr_model_from_flags(
-        only_digits=only_digits)
-  else:
-    raise ValueError('Cannot handle model flag [{!s}].'.format(model))
+  model = bin_lr_models.create_prox_lr_model_from_flags(num_attr)
 
 
   model.compile(
-      loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+      loss=tf.keras.losses.BinaryCrossentropy(),
       optimizer=optimizer,
-      metrics=[tf.keras.metrics.SparseCategoricalAccuracy()])
+      metrics=[tf.keras.metrics.BinaryAccuracy()])
 
   centralized_training_loop.run(
       keras_model=model,

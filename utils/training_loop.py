@@ -1,4 +1,4 @@
-# Copyright 2019, Google LLC.
+# Copyright 2021, Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -232,6 +232,9 @@ def run(iterative_process: tff.templates.IterativeProcess,
     train_metrics['training_secs'] = time.time() - training_start_time
     train_metrics['model_delta_l2_norm'] = _compute_numpy_l2_difference(
         state.model, prev_model)
+
+    # train_metrics['l1 norm'] = tf.norm(state.model.trainable[0], 1).numpy()
+    # train_metrics['l2 norm'] = tf.norm(state.model.trainable[0]).numpy()
     train_metrics.update(round_metrics)
 
     logging.info('Round {:2d}, {:.2f}s per round in average.'.format(

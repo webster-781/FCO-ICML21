@@ -28,14 +28,6 @@ py_library(
     ],
 )
 
-py_test(
-    name = "centralized_training_loop_test",
-    srcs = ["centralized_training_loop_test.py"],
-    python_version = "PY3",
-    srcs_version = "PY3",
-    deps = [":centralized_training_loop"],
-)
-
 py_library(
     name = "checkpoint_manager",
     srcs = ["checkpoint_manager.py"],
@@ -119,7 +111,16 @@ py_test(
     srcs = ["training_utils_test.py"],
     python_version = "PY3",
     srcs_version = "PY3",
-    deps = [":training_utils"],
+    deps = [
+        ":training_utils",
+    ],
+)
+
+py_library(
+    name = "threading_utils",
+    srcs = ["threading_utils.py"],
+    srcs_version = "PY3",
+    deps = [":utils_impl"],
 )
 
 py_library(

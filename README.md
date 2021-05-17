@@ -1,26 +1,29 @@
-# Federated Research
+# Federated Composite Optimization
+This code repository is for "Federated Composite Optimization", to appear in ICML 2021. This repo is forked from [Federated Research](https://github.com/google-research/federated) repository developed with [TensorFlow Federated (TFF)](https://www.tensorflow.org/federated), an open-source framework for machine learning and other computations on decentralized data.
 
-Federated Research is a collection of research projects in [Federated Learning (FL)](https://ai.googleblog.com/2017/04/federated-learning-collaborative.html) and [Federated Analytics (FA)](https://ai.googleblog.com/2020/05/federated-analytics-collaborative-data.html).
-FL is an approach to machine learning where a shared global model is trained across
-many participating clients that keep their training data locally. FA is a practice of applying data science methods to the analysis of raw data that is stored locally on users’ devices.
+Some pip packages are required by this library, and may need to be installed:
 
-Most of the research projects are developed with
-[TensorFlow Federated (TFF)](https://www.tensorflow.org/federated), which is an
-open-source framework for machine learning and other computations on
-decentralized data.
-[TFF for research](https://www.tensorflow.org/federated/tff_for_research) is an
-overview.
+```
+pip install absl-py
+pip install attr
+pip install dm-tree
+pip install numpy
+pip install pandas
+pip install tensorflow
+pip install tensorflow-federated
+```
 
-## Contributing
+We also require [Bazel](https://www.bazel.build/) in order to run the code.
+Please see the guide
+[here](https://docs.bazel.build/versions/master/install.html) for installation
+instructions.
 
-This repository collects Google research projects on federated learning and
-federated analytics. We do not currently accept pull request for this
-repository.
+## Directory structure
 
-Please use [GitHub issues](https://github.com/google-research/federated/issues)
-to communicate with project owners for requests and bugs
+The directory `utils` is forked from [Federated Research](https://github.com/google-research/federated) repository, which contains general utilities used by the other directories under research/. Examples include utilities for saving checkpoints, and configuring experiments via command-line flags. 
 
-Please ask your Google collaborators to reach out if you want to feature your
-research projects here, and review the
-[contribution guidelines](CONTRIBUTING.md#code-style-guidelines-and-best-practices)
-for guidelines on the coding style, best practices, etc.
+The directory `optimization` is broken up into five task directories. Each task directory contains task-specific libraries (such as libraries for loading the correct dataset), as well as libraries for performing federated and non-federated (centralized) training. These are in the `optimization/{task}` folders.
+
+A single binary for running these tasks can be found at `main/federated_trainer.py`. This binary will, according to `absl` flags, run any of the six task-specific federated training libraries.
+
+There is also a `shared` directory with utilities specific to these experiments, such as implementations of metrics used for evaluation.

@@ -1,4 +1,4 @@
-# Copyright 2020, Google LLC.
+# Copyright 2021, Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,26 +23,40 @@ iterative process, see `shared/fed_avg_schedule.py`.
 import collections
 from typing import Any, Callable, Optional
 
+import wandb
 from absl import app
 from absl import flags
 import tensorflow as tf
 import tensorflow_federated as tff
 
-from optimization.cifar100 import federated_cifar100
 from optimization.emnist import federated_emnist
-from optimization.emnist_ae import federated_emnist_ae
-from optimization.shakespeare import federated_shakespeare
+from optimization.bin_lr import federated_bin_lr
+from optimization.lstsq import federated_lstsq
+from optimization.nuclear import federated_nuclear
+
+
 from optimization.shared import fed_avg_schedule
+from optimization.shared import fed_dual_avg_schedule
 from optimization.shared import optimizer_utils
-from optimization.stackoverflow import federated_stackoverflow
-from optimization.stackoverflow_lr import federated_stackoverflow_lr
+from optimization.shared import projector_utils
+
+from utils import threading_utils
 from utils import utils_impl
 
 _SUPPORTED_TASKS = [
-    'cifar100', 'emnist_cr', 'emnist_ae', 'shakespeare', 'stackoverflow_nwp',
-    'stackoverflow_lr'
+    'emnist_cr', 'bin_lr', 'lstsq', 'nuclear'
 ]
 
+with utils_impl.record_new_flags() as hparam_flags:
+  # won't be added to the shared_flags
+  flags.DEFINE_float('client_weight_pow', 1.0,
+                     'How to weight in model delta. (num ** client_weight_pow)')
+  flags.DEFINE_bool('use_subgrad', False, 'whether to use subgrad, default False, override dual-avg options' )
+  flags.DEFINE_bool('use_dual_avg', True, 'whether to use dual averaging' )
+  flags.DEFINE_string(
+      'experiment_name', None, 'The name of this experiment. Will be append to '
+      '--root_output_dir to separate experiment results.')
+# note: from iterative_process_builder
 with utils_impl.record_hparam_flags() as optimizer_flags:
   # Defining optimizer flags
   optimizer_utils.define_optimizer_flags('client')
@@ -57,14 +71,11 @@ with utils_impl.record_hparam_flags() as shared_flags:
   flags.DEFINE_integer('client_batch_size', 20, 'Batch size on the clients.')
   flags.DEFINE_integer('clients_per_round', 10,
                        'How many clients to sample per round.')
+  flags.DEFINE_float('client_sample_pow', 0.0,
+                     'Sample prob of clients. (num ** client_sample_pow)')
   flags.DEFINE_integer('client_datasets_random_seed', 1,
                        'Random seed for client sampling.')
   flags.DEFINE_integer('total_rounds', 200, 'Number of total training rounds.')
-
-  # Training loop configuration
-  flags.DEFINE_string(
-      'experiment_name', None, 'The name of this experiment. Will be append to '
-      '--root_output_dir to separate experiment results.')
   flags.DEFINE_string('root_output_dir', '/tmp/fed_opt/',
                       'Root directory for writing experiment output.')
   flags.DEFINE_boolean(
@@ -74,7 +85,7 @@ with utils_impl.record_hparam_flags() as shared_flags:
       'rounds_per_eval', 1,
       'How often to evaluate the global model on the validation dataset.')
   flags.DEFINE_integer(
-      'rounds_per_train_eval', 100,
+      'rounds_per_train_eval', 10,
       'How often to evaluate the global model on the entire training dataset.')
   flags.DEFINE_integer('rounds_per_checkpoint', 50,
                        'How often to checkpoint the global model.')
@@ -87,74 +98,59 @@ with utils_impl.record_hparam_flags() as task_flags:
   flags.DEFINE_enum('task', None, _SUPPORTED_TASKS,
                     'Which task to perform federated training on.')
 
-with utils_impl.record_hparam_flags() as cifar100_flags:
-  # CIFAR-100 flags
-  flags.DEFINE_integer('cifar100_crop_size', 24, 'The height and width of '
-                       'images after preprocessing.')
-
 with utils_impl.record_hparam_flags() as emnist_cr_flags:
   # EMNIST CR flags
-  flags.DEFINE_enum(
-      'emnist_cr_model', 'cnn', ['cnn', '2nn'], 'Which model to '
-      'use. This can be a convolutional model (cnn) or a two '
-      'hidden-layer densely connected network (2nn).')
+  pass
 
-with utils_impl.record_hparam_flags() as shakespeare_flags:
-  # Shakespeare flags
+with utils_impl.record_hparam_flags() as bin_lr_flags:
+  # Binary logistic regression flags
+  flags.DEFINE_string(
+    'bin_lr_dataset_name', None, 'The name of datasets')
   flags.DEFINE_integer(
-      'shakespeare_sequence_length', 80,
-      'Length of character sequences to use for the RNN model.')
+    'bin_lr_num_attr', None, 'Number of attributes'
+  )
 
-with utils_impl.record_hparam_flags() as so_nwp_flags:
-  # Stack Overflow NWP flags
-  flags.DEFINE_integer('so_nwp_vocab_size', 10000, 'Size of vocab to use.')
-  flags.DEFINE_integer('so_nwp_num_oov_buckets', 1,
-                       'Number of out of vocabulary buckets.')
-  flags.DEFINE_integer('so_nwp_sequence_length', 20,
-                       'Max sequence length to use.')
-  flags.DEFINE_integer('so_nwp_max_elements_per_user', 1000, 'Max number of '
-                       'training sentences to use per user.')
+with utils_impl.record_hparam_flags() as lstsq_flags:
+  # Binary logistic regression flags
+  flags.DEFINE_string(
+    'lstsq_dataset_name', None, 'The name of datasets')
   flags.DEFINE_integer(
-      'so_nwp_num_validation_examples', 10000, 'Number of examples '
-      'to use from test set for per-round validation.')
-  flags.DEFINE_integer('so_nwp_embedding_size', 96,
-                       'Dimension of word embedding to use.')
-  flags.DEFINE_integer('so_nwp_latent_size', 670,
-                       'Dimension of latent size to use in recurrent cell')
-  flags.DEFINE_integer('so_nwp_num_layers', 1,
-                       'Number of stacked recurrent layers to use.')
-  flags.DEFINE_boolean(
-      'so_nwp_shared_embedding', False,
-      'Boolean indicating whether to tie input and output embeddings.')
+    'lstsq_num_attr', None, 'Number of attributes'
+  )
+  flags.DEFINE_integer(
+    'lstsq_nnz_real', None, 'Number of ground truth non-zeros'
+  )
+  flags.DEFINE_float(
+    'lstsq_nnz_cutoff', 1e-4, 'sparsity cutoff'
+  )
 
-with utils_impl.record_hparam_flags() as so_lr_flags:
-  # Stack Overflow LR flags
-  flags.DEFINE_integer('so_lr_vocab_tokens_size', 10000,
-                       'Vocab tokens size used.')
-  flags.DEFINE_integer('so_lr_vocab_tags_size', 500, 'Vocab tags size used.')
+with utils_impl.record_hparam_flags() as nuclear_flags:
+  # Binary logistic regression flags
+  flags.DEFINE_string(
+    'nuclear_dataset_name', None, 'The name of datasets')
   flags.DEFINE_integer(
-      'so_lr_num_validation_examples', 10000, 'Number of examples '
-      'to use from test set for per-round validation.')
-  flags.DEFINE_integer('so_lr_max_elements_per_user', 1000,
-                       'Max number of training '
-                       'sentences to use per user.')
+    'nuclear_n_row', None, 'Number of rows'
+  )
+  flags.DEFINE_integer(
+    'nuclear_rank_real', None, 'Rank of ground truth'
+  )
+  flags.DEFINE_float(
+    'nuclear_nnz_cutoff', 1e-4, 'sparsity cutoff'
+  )
 
 FLAGS = flags.FLAGS
 
 TASK_FLAGS = collections.OrderedDict(
-    cifar100=cifar100_flags,
     emnist_cr=emnist_cr_flags,
-    shakespeare=shakespeare_flags,
-    stackoverflow_nwp=so_nwp_flags,
-    stackoverflow_lr=so_lr_flags)
+    bin_lr=bin_lr_flags,
+    lstsq=lstsq_flags,
+    nuclear=nuclear_flags)
 
 TASK_FLAG_PREFIXES = collections.OrderedDict(
-    cifar100='cifar100',
     emnist_cr='emnist_cr',
-    emnist_ae='emnist_ae',
-    shakespeare='shakespeare',
-    stackoverflow_nwp='so_nwp',
-    stackoverflow_lr='so_lr')
+    bin_lr='bin_lr',
+    lstsq='lstsq',
+    nuclear='nuclear')
 
 
 def _get_hparam_flags():
@@ -205,11 +201,26 @@ def main(argv):
     raise app.UsageError('Expected no command-line arguments, '
                          'got: {}'.format(argv))
 
+  threading_utils.set_threading_from_flags()
+
+  if FLAGS.experiment_name is not None:
+    experiment_name = FLAGS.experiment_name
+    wandb.init(config=FLAGS, sync_tensorboard=True,name=experiment_name)
+  else:
+    wandb.init(config=FLAGS,sync_tensorboard=True)
+    wandb.run.save()
+    wandb.run.name = FLAGS.task + "_f_" + str(wandb.run.name) + "_" + str(wandb.run.id)
+    wandb.run.save()
+    experiment_name = wandb.run.name
+
+  # iterative_process_builder.py
   client_optimizer_fn = optimizer_utils.create_optimizer_fn_from_flags('client')
   server_optimizer_fn = optimizer_utils.create_optimizer_fn_from_flags('server')
 
   client_lr_schedule = optimizer_utils.create_lr_schedule_from_flags('client')
   server_lr_schedule = optimizer_utils.create_lr_schedule_from_flags('server')
+
+  client_mirror, server_mirror = projector_utils.build_mirror_fn_from_flags()
 
   def iterative_process_builder(
       model_fn: Callable[[], tff.learning.Model],
@@ -227,32 +238,38 @@ def main(argv):
     Returns:
       A `tff.templates.IterativeProcess`.
     """
+    if FLAGS.use_dual_avg:
+      # Federated Dual Averaging
+      process_builder = fed_dual_avg_schedule.build_fed_dual_avg_process
+    else:
+      # Federated Mirror Descent
+      process_builder = fed_avg_schedule.build_fed_avg_process
 
-    return fed_avg_schedule.build_fed_avg_process(
+    return process_builder(
         model_fn=model_fn,
         client_optimizer_fn=client_optimizer_fn,
         client_lr=client_lr_schedule,
+        client_mirror=client_mirror,
         server_optimizer_fn=server_optimizer_fn,
         server_lr=server_lr_schedule,
-        client_weight_fn=client_weight_fn)
+        server_mirror=server_mirror,
+        client_weight_fn=client_weight_fn,
+        client_weight_pow=FLAGS.client_weight_pow)
 
   shared_args = utils_impl.lookup_flag_values(shared_flags)
   shared_args['iterative_process_builder'] = iterative_process_builder
+  shared_args['experiment_name'] = experiment_name
   task_args = _get_task_args()
   hparam_dict = _get_hparam_flags()
 
-  if FLAGS.task == 'cifar100':
-    run_federated_fn = federated_cifar100.run_federated
-  elif FLAGS.task == 'emnist_cr':
+  if FLAGS.task == 'emnist_cr':
     run_federated_fn = federated_emnist.run_federated
-  elif FLAGS.task == 'emnist_ae':
-    run_federated_fn = federated_emnist_ae.run_federated
-  elif FLAGS.task == 'shakespeare':
-    run_federated_fn = federated_shakespeare.run_federated
-  elif FLAGS.task == 'stackoverflow_nwp':
-    run_federated_fn = federated_stackoverflow.run_federated
-  elif FLAGS.task == 'stackoverflow_lr':
-    run_federated_fn = federated_stackoverflow_lr.run_federated
+  elif FLAGS.task == 'bin_lr':
+    run_federated_fn = federated_bin_lr.run_federated
+  elif FLAGS.task == 'lstsq':
+    run_federated_fn = federated_lstsq.run_federated
+  elif FLAGS.task == 'nuclear':
+    run_federated_fn = federated_nuclear.run_federated
   else:
     raise ValueError(
         '--task flag {} is not supported, must be one of {}.'.format(

@@ -5,90 +5,61 @@ package(default_visibility = ["//visibility:public"])
 licenses(["notice"])
 
 py_library(
+    name = "kernelized",
+    srcs = ["kernelized.py"],
+    srcs_version = "PY3",
+    deps = []
+)
+
+py_library(
+    name = "augmented_dense",
+    srcs = ["augmented_dense.py"],
+    srcs_version = "PY3",
+    deps = []
+)
+
+
+py_library(
+    name = "lstsq_models",
+    srcs = ["lstsq_models.py"],
+    srcs_version = "PY3",
+    deps = [
+        # "//utils:utils_impl",
+        "//optimization/shared:projector_utils"
+        ]
+)
+
+py_library(
+    name = "nuclear_models",
+    srcs = ["nuclear_models.py"],
+    srcs_version = "PY3",
+    deps = [
+        # "//utils:utils_impl",
+        "//optimization/shared:projector_utils"
+        ]
+)
+
+py_library(
     name = "emnist_models",
     srcs = ["emnist_models.py"],
     srcs_version = "PY3",
-)
-
-py_test(
-    name = "emnist_models_test",
-    srcs = ["emnist_models_test.py"],
-    python_version = "PY3",
-    srcs_version = "PY3",
-    deps = [":emnist_models"],
-)
-
-py_library(
-    name = "emnist_ae_models",
-    srcs = ["emnist_ae_models.py"],
-    srcs_version = "PY3",
-)
-
-py_test(
-    name = "emnist_ae_models_test",
-    srcs = ["emnist_ae_models_test.py"],
-    python_version = "PY3",
-    srcs_version = "PY3",
-    deps = [":emnist_ae_models"],
+    deps = [
+        "//utils:utils_impl",
+        "//optimization/shared:projector_utils",
+        "//utils/models:kernelized",
+        "//utils/models:augmented_dense"
+        ]
 )
 
 py_library(
-    name = "resnet_models",
-    srcs = ["resnet_models.py"],
-    srcs_version = "PY3",
-)
-
-py_test(
-    name = "resnet_models_test",
-    size = "small",
-    timeout = "moderate",
-    srcs = ["resnet_models_test.py"],
-    python_version = "PY3",
-    srcs_version = "PY3",
-    deps = [":resnet_models"],
-)
-
-py_library(
-    name = "shakespeare_models",
-    srcs = ["shakespeare_models.py"],
-    srcs_version = "PY3",
-)
-
-py_test(
-    name = "shakespeare_models_test",
-    srcs = ["shakespeare_models_test.py"],
-    python_version = "PY3",
+    name = "bin_lr_models",
+    srcs = ["bin_lr_models.py"],
     srcs_version = "PY3",
     deps = [
-        ":shakespeare_models",
-        "//optimization/shared:keras_metrics",
-    ],
+        "//utils:utils_impl",
+        "//optimization/shared:projector_utils",
+        "//utils/models:augmented_dense"
+        ]
 )
 
-py_library(
-    name = "stackoverflow_models",
-    srcs = ["stackoverflow_models.py"],
-    srcs_version = "PY3",
-)
 
-py_test(
-    name = "stackoverflow_models_test",
-    srcs = ["stackoverflow_models_test.py"],
-    python_version = "PY3",
-    srcs_version = "PY3",
-    deps = [":stackoverflow_models"],
-)
-
-py_library(
-    name = "stackoverflow_lr_models",
-    srcs = ["stackoverflow_lr_models.py"],
-    srcs_version = "PY3",
-)
-
-py_test(
-    name = "stackoverflow_lr_models_test",
-    srcs = ["stackoverflow_lr_models_test.py"],
-    python_version = "PY3",
-    srcs_version = "PY3",
-    deps = [":stackoverflow_lr_models"],
-)

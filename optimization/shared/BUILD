@@ -10,35 +10,10 @@ py_library(
     srcs_version = "PY3",
 )
 
-py_test(
-    name = "fed_avg_schedule_test",
-    size = "large",
-    srcs = ["fed_avg_schedule_test.py"],
-    python_version = "PY3",
-    shard_count = 2,
-    srcs_version = "PY3",
-    deps = [":fed_avg_schedule"],
-)
-
 py_library(
-    name = "iterative_process_builder",
-    srcs = ["iterative_process_builder.py"],
+    name = "fed_dual_avg_schedule",
+    srcs = ["fed_dual_avg_schedule.py"],
     srcs_version = "PY3",
-    deps = [
-        ":fed_avg_schedule",
-        ":optimizer_utils",
-        "//utils:utils_impl",
-    ],
-)
-
-py_test(
-    name = "iterative_process_builder_test",
-    size = "medium",
-    timeout = "long",
-    srcs = ["iterative_process_builder_test.py"],
-    python_version = "PY3",
-    srcs_version = "PY3",
-    deps = [":iterative_process_builder"],
 )
 
 py_library(
@@ -89,6 +64,21 @@ py_test(
     python_version = "PY3",
     srcs_version = "PY3",
     deps = [":optimizer_utils"],
+)
+
+py_library(
+    name = "projector_utils",
+    srcs = ["projector_utils.py"],
+    srcs_version = "PY3",
+    deps = ["//utils:utils_impl",
+            ":simplex_projection"
+    ],
+)
+
+py_library(
+    name = "simplex_projection",
+    srcs = ["simplex_projection.py"],
+    srcs_version = "PY3",
 )
 
 py_library(

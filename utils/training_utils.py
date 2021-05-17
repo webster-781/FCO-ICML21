@@ -1,4 +1,4 @@
-# Copyright 2020, Google LLC.
+# Copyright 2021, Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -120,9 +120,34 @@ def build_evaluate_fn(
     keras_model = compiled_eval_keras_model()
     reference_model.assign_weights_to(keras_model)
     logging.info('Evaluating the current model')
+	
     eval_metrics = keras_model.evaluate(eval_tuple_dataset, verbose=0)
-    return dict(zip(keras_model.metrics_names, eval_metrics))
+    metrics_dict = dict(zip(keras_model.metrics_names, eval_metrics))
 
+    l0 = 0.0
+    max_l1 = 0.0
+    max_l2 = 0.0
+    reg_loss = 0.0
+
+    for key, val in (metrics_dict.items()):
+      # val = val.numpy()
+      if isinstance(key, str):
+        if key.endswith("l0"):
+          l0 += val
+        elif key.endswith("l1"):
+          max_l1 = max(max_l1, val)
+        elif key.endswith("l2"):
+          max_l2 = max(max_l2, val)
+        elif key.endswith("reg_loss"):
+          reg_loss += val
+
+    metrics_dict['l0'] = l0
+    metrics_dict['max_l1'] = max_l1
+    metrics_dict['max_l2'] = max_l2
+    metrics_dict['tot_loss'] = metrics_dict['loss'] + reg_loss
+
+    return metrics_dict
+	
   return evaluate_fn
 
 
@@ -130,6 +155,7 @@ def build_sample_fn(
     a: Union[Sequence[Any], int],
     size: int,
     replace: bool = False,
+    p: Union[Sequence[Any], None] = None,
     random_seed: Optional[int] = None) -> Callable[[int], np.ndarray]:
   """Builds the function for sampling from the input iterator at each round.
 
@@ -138,6 +164,8 @@ def build_sample_fn(
     size: The number of samples to return each round.
     replace: A boolean indicating whether the sampling is done with replacement
       (True) or without replacement (False).
+    p: The probabilities associated with each entry in a. If not given the 
+      sample assumes a uniform distribution over all entries in a. 
     random_seed: If random_seed is set as an integer, then we use it as a random
       seed for which clients are sampled at each round. In this case, we set a
       random seed before sampling clients according to a multiplicative linear
@@ -150,7 +178,6 @@ def build_sample_fn(
     A function which returns a list of elements from the input iterator at a
     given round round_num.
   """
-
   if isinstance(random_seed, int):
     mlcg_start = np.random.RandomState(random_seed).randint(1, MLCG_MODULUS - 1)
 
@@ -163,7 +190,7 @@ def build_sample_fn(
       random_state = np.random.RandomState(get_pseudo_random_int(round_num))
     else:
       random_state = np.random.RandomState()
-    return random_state.choice(a, size=size, replace=replace)
+    return random_state.choice(a, size=size, replace=replace, p=p)
 
   return functools.partial(sample, random_seed=random_seed)
 
@@ -171,6 +198,7 @@ def build_sample_fn(
 def build_client_datasets_fn(
     train_dataset: tff.simulation.ClientData,
     train_clients_per_round: int,
+    client_sample_pow: float = 0.0,
     random_seed: Optional[int] = None
 ) -> Callable[[int], List[tf.data.Dataset]]:
   """Builds the function for generating client datasets at each round.
@@ -193,11 +221,25 @@ def build_client_datasets_fn(
     A function which returns a list of `tf.data.Dataset` objects at a
     given round round_num.
   """
+
+  n_samples = np.array([tf.data.experimental.cardinality(
+      train_dataset.create_tf_dataset_for_client(client_id)
+      ) for client_id in train_dataset.client_ids])
+  unnormalized_p = n_samples ** client_sample_pow
+  p = unnormalized_p / sum(unnormalized_p)
+
   sample_clients_fn = build_sample_fn(
       train_dataset.client_ids,
       size=train_clients_per_round,
       replace=False,
+      p=p,
       random_seed=random_seed)
+  # else:
+  #   sample_clients_fn = build_sample_fn(
+  #       train_dataset.client_ids,
+  #       size=train_clients_per_round,
+  #       replace=False,
+  #       random_seed=random_seed)
 
   def client_datasets(round_num):
     sampled_clients = sample_clients_fn(round_num)

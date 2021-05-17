@@ -5,25 +5,24 @@ package(default_visibility = ["//visibility:public"])
 licenses(["notice"])
 
 py_library(
-    name = "centralized_emnist",
-    srcs = ["centralized_emnist.py"],
+    name = "centralized_bin_lr",
+    srcs = ["centralized_bin_lr.py"],
     srcs_version = "PY3",
     deps = [
         "//utils:centralized_training_loop",
-        "//utils/datasets:emnist_dataset",
-        "//utils/models:emnist_models",
-        "//utils:utils_impl"
+        "//utils/datasets:synthetic_dataset",
+        "//utils/models:bin_lr_models",
     ],
 )
 
 py_library(
-    name = "federated_emnist",
-    srcs = ["federated_emnist.py"],
+    name = "federated_bin_lr",
+    srcs = ["federated_bin_lr.py"],
     srcs_version = "PY3",
     deps = [
         "//utils:training_loop",
         "//utils:training_utils",
-        "//utils/datasets:emnist_dataset",
-        "//utils/models:emnist_models",
+        "//utils/datasets:synthetic_dataset",
+        "//utils/models:bin_lr_models",
     ],
 )

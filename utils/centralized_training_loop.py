@@ -1,4 +1,4 @@
-# Copyright 2020, Google LLC.
+# Copyright 2021, Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,9 +20,10 @@ from absl import logging
 import pandas as pd
 import tensorflow as tf
 
+from optimization.shared import projector_utils
 from optimization.shared import keras_callbacks
 from utils import utils_impl
-
+from wandb.keras import WandbCallback
 
 def run(
     keras_model: tf.keras.Model,
@@ -59,6 +60,8 @@ def run(
   Returns:
     A `tf.keras.callbacks.History` object.
   """
+  # logging.info(len([_ for _ in train_dataset]))
+
   tensorboard_dir = os.path.join(root_output_dir, 'logdir', experiment_name)
   results_dir = os.path.join(root_output_dir, 'results', experiment_name)
 
@@ -66,6 +69,7 @@ def run(
     tf.io.gfile.makedirs(path)
 
   if hparams_dict:
+    hparams_dict['results_file'] = results_dir
     hparams_file = os.path.join(results_dir, 'hparams.csv')
     logging.info('Saving hyper parameters to: [%s]', hparams_file)
     hparams_df = pd.DataFrame(hparams_dict, index=[0])
@@ -74,6 +78,10 @@ def run(
   csv_logger_callback = keras_callbacks.AtomicCSVLogger(results_dir)
   tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=tensorboard_dir)
   training_callbacks = [tensorboard_callback, csv_logger_callback]
+
+  # Note: add record norm callback
+  # training_callbacks.append(projector_utils.RecordWeightNorm())
+  training_callbacks.append(WandbCallback())
 
   if decay_epochs is not None and decay_epochs > 0:
     # Reduce the learning rate after a fixed number of epochs.
