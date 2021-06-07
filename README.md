@@ -1,9 +1,27 @@
 # Federated Composite Optimization
 This code repository is for "[Federated Composite Optimization](https://arxiv.org/abs/2011.08474)" authored by [Honglin Yuan](https://hongliny.github.io) (Stanford), Manzil Zaheer (Google) and Sashank Reddi (Google), to appear in ICML 2021. 
 
-[Bibtex](https://dblp.org/rec/journals/corr/abs-2011-08474.html?view=bibtex) 
-| [talk video at FLOW seminar](https://www.youtube.com/watch?v=tKDbc60XJks) 
+[talk video at FLOW seminar](https://www.youtube.com/watch?v=tKDbc60XJks) 
 | [slides (pdf)](https://hongliny.github.io/files/FCO_ICML21/FCO_ICML21_slides.pdf) 
+
+bibtex
+```
+@article{DBLP:journals/corr/abs-2011-08474,
+  author    = {Honglin Yuan and
+               Manzil Zaheer and
+               Sashank J. Reddi},
+  title     = {Federated Composite Optimization},
+  journal   = {CoRR},
+  volume    = {abs/2011.08474},
+  year      = {2020},
+  url       = {https://arxiv.org/abs/2011.08474},
+  archivePrefix = {arXiv},
+  eprint    = {2011.08474},
+  timestamp = {Wed, 18 Nov 2020 16:48:35 +0100},
+  biburl    = {https://dblp.org/rec/journals/corr/abs-2011-08474.bib},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+```
 
 ---
 
