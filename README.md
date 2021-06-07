@@ -1,5 +1,13 @@
 # Federated Composite Optimization
-This code repository is for "Federated Composite Optimization", to appear in ICML 2021. This repo is forked from [Federated Research](https://github.com/google-research/federated) repository developed with [TensorFlow Federated (TFF)](https://www.tensorflow.org/federated), an open-source framework for machine learning and other computations on decentralized data.
+This code repository is for "[Federated Composite Optimization](https://arxiv.org/abs/2011.08474)" authored by [Honglin Yuan](https://hongliny.github.io) (Stanford), Manzil Zaheer (Google) and Sashank Reddi (Google), to appear in ICML 2021. 
+
+[Bibtex](https://dblp.org/rec/journals/corr/abs-2011-08474.html?view=bibtex) 
+| [talk video at FLOW seminar](https://www.youtube.com/watch?v=tKDbc60XJks) 
+| [slides (pdf)](https://hongliny.github.io/files/FCO_ICML21/FCO_ICML21_slides.pdf) 
+
+---
+
+This repo is forked from [Federated Research](https://github.com/google-research/federated) repository developed with [TensorFlow Federated (TFF)](https://www.tensorflow.org/federated), an open-source framework for machine learning and other computations on decentralized data.
 
 Some pip packages are required by this library, and may need to be installed:
 
