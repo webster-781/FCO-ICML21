@@ -6,19 +6,23 @@ This code repository is for "[Federated Composite Optimization](https://arxiv.or
 
 bibtex
 ```
-@article{DBLP:journals/corr/abs-2011-08474,
+@inproceedings{DBLP:conf/icml/YuanZR21,
   author    = {Honglin Yuan and
                Manzil Zaheer and
                Sashank J. Reddi},
+  editor    = {Marina Meila and
+               Tong Zhang},
   title     = {Federated Composite Optimization},
-  journal   = {CoRR},
-  volume    = {abs/2011.08474},
-  year      = {2020},
-  url       = {https://arxiv.org/abs/2011.08474},
-  archivePrefix = {arXiv},
-  eprint    = {2011.08474},
-  timestamp = {Wed, 18 Nov 2020 16:48:35 +0100},
-  biburl    = {https://dblp.org/rec/journals/corr/abs-2011-08474.bib},
+  booktitle = {Proceedings of the 38th International Conference on Machine Learning,
+               {ICML} 2021, 18-24 July 2021, Virtual Event},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {139},
+  pages     = {12253--12266},
+  publisher = {{PMLR}},
+  year      = {2021},
+  url       = {http://proceedings.mlr.press/v139/yuan21d.html},
+  timestamp = {Wed, 14 Jul 2021 15:41:58 +0200},
+  biburl    = {https://dblp.org/rec/conf/icml/YuanZR21.bib},
   bibsource = {dblp computer science bibliography, https://dblp.org}
 }
 ```
