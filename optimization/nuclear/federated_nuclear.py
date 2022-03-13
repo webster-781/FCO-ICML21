@@ -15,6 +15,8 @@
 
 import functools
 from typing import Callable, Optional
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from absl import flags
 from absl import logging

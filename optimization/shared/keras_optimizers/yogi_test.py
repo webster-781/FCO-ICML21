@@ -13,6 +13,8 @@
 # limitations under the License.
 
 from absl.testing import parameterized
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 import numpy as np
 import tensorflow as tf

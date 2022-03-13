@@ -20,6 +20,8 @@ from typing import Any, Dict
 import pandas as pd
 import tensorflow as tf
 import tree
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from utils import utils_impl
 

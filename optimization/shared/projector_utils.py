@@ -17,6 +17,8 @@ import functools
 import wandb
 
 import tensorflow as tf
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from absl import flags
 from utils import utils_impl

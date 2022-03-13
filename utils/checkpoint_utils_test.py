@@ -17,6 +17,8 @@ import os.path
 
 import attr
 import tensorflow as tf
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from utils import checkpoint_utils
 

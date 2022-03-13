@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Federated Binary Logistic Regression on Synthetic Dataset"""
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 import functools
 from typing import Callable, Optional

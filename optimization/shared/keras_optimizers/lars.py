@@ -26,6 +26,8 @@ from typing import List, Optional, Union
 
 import numpy as np
 import tensorflow as tf
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 
 FloatTensorLike = Union[tf.Tensor, float, np.float16, np.float32, np.float64]

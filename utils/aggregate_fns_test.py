@@ -15,6 +15,8 @@ import collections
 
 import tensorflow as tf
 import tensorflow_federated as tff
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from utils import aggregate_fns
 

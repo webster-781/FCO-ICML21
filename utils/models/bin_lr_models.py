@@ -18,6 +18,8 @@
 # import numpy as np
 from abc import abstractmethod
 import tensorflow as tf
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from optimization.shared import projector_utils
 from utils.models.augmented_dense import AugmentedDense

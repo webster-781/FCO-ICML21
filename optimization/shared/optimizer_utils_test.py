@@ -18,6 +18,8 @@ import contextlib
 from absl import flags
 from absl.testing import parameterized
 import tensorflow as tf
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from optimization.shared import optimizer_utils
 

@@ -19,6 +19,8 @@ from absl import flags
 
 # import numpy as np
 import tensorflow as tf
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from optimization.shared import projector_utils
 from utils.models import kernelized

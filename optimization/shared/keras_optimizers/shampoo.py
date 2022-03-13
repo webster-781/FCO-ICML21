@@ -22,6 +22,8 @@ The new features in federated shampoo optimizer:
   * Computing preconditioner on the server.
   * Selecting to use gradient_norm_adjuster, 'adagrad' or None.
 """
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 import functools
 from typing import Sequence, List, Optional, Tuple, Union

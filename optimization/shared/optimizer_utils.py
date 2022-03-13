@@ -21,6 +21,8 @@ from absl import flags
 from absl import logging
 import tensorflow as tf
 import tensorflow_addons.optimizers as tfao
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from optimization.shared.keras_optimizers import lars
 from optimization.shared.keras_optimizers import yogi

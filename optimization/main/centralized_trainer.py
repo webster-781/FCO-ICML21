@@ -25,6 +25,8 @@ from absl import app
 from absl import flags
 
 import wandb
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from optimization.shared import optimizer_utils
 from optimization.emnist import centralized_emnist

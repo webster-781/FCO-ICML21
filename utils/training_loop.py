@@ -23,6 +23,8 @@ from absl import logging
 import pandas as pd
 import tensorflow as tf
 import tensorflow_federated as tff
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from utils import checkpoint_manager
 from utils import metrics_manager

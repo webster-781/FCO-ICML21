@@ -14,6 +14,8 @@
 """Build a model for Least-Squares Regression."""
 
 # from abc import abstractmethod
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 import tensorflow as tf
 from optimization.shared import projector_utils

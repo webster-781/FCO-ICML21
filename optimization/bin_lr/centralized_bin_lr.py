@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Centralized Binary Logistic Regression on Synthetic Dataset"""
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from typing import Any, Mapping, Optional
 from absl import flags

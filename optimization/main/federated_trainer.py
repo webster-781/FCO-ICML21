@@ -28,6 +28,8 @@ from absl import app
 from absl import flags
 import tensorflow as tf
 import tensorflow_federated as tff
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from optimization.emnist import federated_emnist
 from optimization.bin_lr import federated_bin_lr

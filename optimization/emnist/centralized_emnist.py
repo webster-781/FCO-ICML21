@@ -14,6 +14,8 @@
 """Baseline experiment on centralized EMNIST data."""
 from typing import Any, Mapping, Optional
 from absl import flags
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 import tensorflow as tf
 

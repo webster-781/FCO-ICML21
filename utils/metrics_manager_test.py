@@ -18,6 +18,8 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import sys
+sys.path.insert(1, '/content/FCO-ICML21/')
 
 from utils import metrics_manager
 from utils import utils_impl
