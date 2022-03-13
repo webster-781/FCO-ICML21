@@ -1,4 +1,4 @@
-tf-estimator-nightly~=2
+tf-estimator-nightly~=2.9.0.dev2022031209
 pandas~=1.0
 numpy~=1.20
 cachetools~=4.2.1
